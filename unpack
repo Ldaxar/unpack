@@ -1,0 +1,104 @@
+#!/usr/bin/python
+import os
+import argparse
+
+parser = argparse.ArgumentParser(description="Extract archive")
+parser.add_argument('-d', '--delete', help="Archive deletion flag", action='store_true')
+parser.add_argument('path', help="Path to archive")
+args = parser.parse_args()
+
+def is_nicely_archived(names_list):
+    rootDir = names_list[0]
+    for fn in names_list:
+        if not fn.startswith(rootDir):
+            return False
+    return True 
+
+def create_name(fullPath):
+    return fullPath.rsplit(".")[0]+'_unpacked'
+
+def fix_name(name):
+    if name[-1] == '/':
+        return name[:-1]
+    return name
+
+def unZip(fullPath,extractDest):
+    from zipfile import ZipFile 
+    zip_ = ZipFile(fullPath, 'r') 
+    fileNames = sorted(zip_.namelist(), key=len)
+    if is_nicely_archived(fileNames):
+        zip_.extractall(extractDest)
+        extractDest = extractDest+'/'+ fix_name(fileNames[0])
+    else:
+        extractDest = extractDest+'/'+create_name(fullPath)
+        zip_.extractall(extractDest)
+    zip_.close()
+    return extractDest
+
+def tar(fullPath,extractDest):
+    import tarfile
+    tar = tarfile.open(fullPath)
+    fileNames = sorted(tar.getnames(), key=len)
+    if is_nicely_archived(fileNames):
+        tar.extractall(extractDest)
+        extractDest = extractDest+'/'+ fix_name(fileNames[0])
+    else:
+        extractDest = extractDest+'/'+create_name(fullPath)
+        tar.extractall(extractDest)
+    tar.close()
+    return extractDest
+
+def seven_z(fullPath,extractDest):
+    import py7zr
+    archive = py7zr.SevenZipFile(fullPath, mode='r')
+    fileNames = sorted(archive.getnames(), key=len)
+    if is_nicely_archived(fileNames):
+        archive.extractall(path=extractDest)
+        extractDest = extractDest+'/'+ fix_name(fileNames[0])
+    else:
+        extractDest = extractDest+'/'+create_name(fullPath)
+        archive.extractall(path=extractDest)
+    archive.close()
+    return extractDest
+
+def gzip(fullPath, extractDest):
+    import gzip
+    with gzip.open(fullPath, 'rb') as s_file, \
+            open(extractDest+'/' + ".".join(s_file.name.rsplit(".",1)[0:-1]), 'wb') as d_file:
+        print(s_file.name)
+        print(extractDest+'/' + ".".join(s_file.name.rsplit(".",1)[0:-1]))
+
+        while True:
+            block = s_file.read(65536)
+            if not block:
+                break
+            else:
+                d_file.write(block)
+        return extractDest+'/' + s_file.name
+
+fullPath = os.path.expanduser(args.path)
+
+archives = {}
+archives["zip"] = unZip
+archives["gz"] = gzip
+archives["bz2"] = tar
+archives["tar"] = tar
+archives["tgz"] = tar
+archives["7z"] = seven_z
+
+if "." in fullPath:
+    extension = fullPath.rsplit(".",1)
+    extension = extension[-1]
+    if extension in archives.keys():
+        try:
+            name = archives.get(extension)(fullPath, os.getcwd())
+            print("Success: Archive extracted as "+name)
+            if args.delete:
+                os.remove(fullPath)
+        except FileNotFoundError:
+            print("ERROR: No such archive: "+fullPath)
+    else:
+        print("    ERROR: No valid file extension detected. ")
+        print("    File must end with extension (.zip,.tar, ...etc")
+else:
+    print("    ERROR: No valid file extension detected. ")
