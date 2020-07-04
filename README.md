@@ -53,3 +53,4 @@ zip
 gz
 7z
 ```
+If you want to add code to extract more archive formats, feel free to add it
